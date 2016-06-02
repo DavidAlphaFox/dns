@@ -316,22 +316,31 @@ lookupRawInternal ::
 lookupRawInternal _ _   dom _
   | isIllegal dom     = return $ Left IllegalDomain
 lookupRawInternal rcv rlv dom typ = do
+    -- 获取查询的ID
     seqno <- genId rlv
+    -- 打包 query
     let query = composeQuery seqno [q]
         checkSeqno = check seqno
     loop query checkSeqno 0 False
   where
     loop query checkSeqno cnt mismatch
+      -- 查询重试的次数上限了
       | cnt == retry = do
           let ret | mismatch  = SequenceNumberMismatch
                   | otherwise = TimeoutExpired
           return $ Left ret
       | otherwise    = do
+          -- 发送请求
           sendAll sock query
+          -- 获取响应的结果
           response <- timeout tm (rcv sock)
           case response of
+              -- 返回的是Nothing
+              -- 那么重新查询一次
               Nothing  -> loop query checkSeqno (cnt + 1) False
               Just res -> do
+                  -- seq是否匹配
+                  -- 如果匹配则表示成功了
                   let valid = checkSeqno res
                   if valid then
                       return $ Right res
@@ -340,15 +349,18 @@ lookupRawInternal rcv rlv dom typ = do
     sock = dnsSock rlv
     tm = dnsTimeout rlv
     retry = dnsRetry rlv
+    -- 创建请求的包体
     q = makeQuestion dom typ
+    -- 检查seqno和包体中的seqno是否相同
     check seqno res = identifier (header res) == seqno
 
 #if mingw32_HOST_OS == 1
+    -- win32没有SendAll的函数
     -- Windows does not support sendAll in Network.ByteString.Lazy.
     -- This implements sendAll with Haskell Strings.
     sendAll sock bs = do
-	sent <- send sock (LB.unpack bs)
-	when (sent < fromIntegral (LB.length bs)) $ sendAll sock (LB.drop (fromIntegral sent) bs)
+      sent <- send sock (LB.unpack bs)
+      when (sent < fromIntegral (LB.length bs)) $ sendAll sock (LB.drop (fromIntegral sent) bs)
 #endif
 
 isIllegal :: Domain -> Bool

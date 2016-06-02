@@ -65,6 +65,7 @@ handleRequest conf@Conf{hosts=hosts} rc req =
     ident = identifier . header $ req
     lookupHosts = do
         q <- listToMaybe . filterA . question $ req
+        -- 直接使用BSD的lookup
         ip <- lookup (qname q) hosts
         return $ responseA ident q [ip]
 

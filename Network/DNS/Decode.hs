@@ -37,7 +37,7 @@ instance ControlException.Exception RDATAParseError
 
 
 -- | Receiving DNS data from 'Socket' and parse it.
-
+-- 从Socket收取消息
 receive :: Socket -> IO DNSMessage
 receive = receiveDNSFormat . sourceSocket
 
