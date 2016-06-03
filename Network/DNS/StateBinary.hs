@@ -71,7 +71,7 @@ addPositionW n = do
 fixedSized :: Int -> (a -> Write) -> a -> SPut
 fixedSized n f a = do addPositionW n
                       return (f a)
-
+-- 会将WState的wsPosition增加
 writeSized :: Show a => (a -> Int) -> (a -> Write) -> a -> SPut
 writeSized n f a = do addPositionW (n a)
                       return (f a)
