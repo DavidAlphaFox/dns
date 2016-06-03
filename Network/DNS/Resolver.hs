@@ -165,7 +165,7 @@ makeAddrInfo addr mport = do
 --   Multiple lookups must be done sequentially with a given
 --   'Resolver'. If multiple 'Resolver's are necessary for
 --   concurrent purpose, use 'withResolvers'.
--- 库不DNS进行地址负载均衡，需要我们上层完成
+
 withResolver :: ResolvSeed -> (Resolver -> IO a) -> IO a
 withResolver seed func = bracket (openSocket seed) sClose $ \sock -> do
     connectSocket sock seed
@@ -175,6 +175,7 @@ withResolver seed func = bracket (openSocket seed) sClose $ \sock -> do
 --   argument. Sockets for UDP are opened inside and are surely closed.
 --   For each 'Resolver', multiple lookups must be done sequentially.
 --   'Resolver's can be used concurrently.
+--  此处进行了DNS均衡
 withResolvers :: [ResolvSeed] -> ([Resolver] -> IO a) -> IO a
 withResolvers seeds func = bracket openSockets closeSockets $ \socks -> do
     mapM_ (uncurry connectSocket) $ zip socks seeds
