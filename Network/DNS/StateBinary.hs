@@ -102,7 +102,7 @@ data PState = PState {
 
 getPosition :: SGet Int
 getPosition = psPosition <$> ST.get
-
+-- 增加位移
 addPosition :: Int -> SGet ()
 addPosition n = do
     PState dom pos <- ST.get
@@ -156,7 +156,8 @@ getNBytes :: Int -> SGet [Int]
 getNBytes len = toInts <$> getNByteString len
   where
     toInts = map fromIntegral . BS.unpack
-
+-- 将流的指针一定N个位置
+-- 然后取出字串，之后进行类型提升
 getNByteString :: Int -> SGet ByteString
 getNByteString n = ST.lift (A.take n) <* addPosition n
 

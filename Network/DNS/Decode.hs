@@ -122,7 +122,7 @@ decodeHeader = do
     decodeArCount = getInt16
 
 ----------------------------------------------------------------
-
+-- 解析请求
 decodeQueries :: Int -> SGet [Question]
 decodeQueries n = replicateM n decodeQuery
 
@@ -245,7 +245,9 @@ decodeDomain = do
     let n = getValue c
     -- Syntax hack to avoid using MultiWayIf
     case () of
+        -- 空内容
         _ | c == 0 -> return ""
+        -- DNS指针
         _ | isPointer c -> do
             d <- getInt8
             let offset = n * 256 + d
@@ -259,12 +261,15 @@ decodeDomain = do
         -- This may change some time in the future.
         _ | isExtLabel c -> return ""
         _ | otherwise -> do
+          -- 剩下的情况就是读取字串
+          -- 进行解码
             hs <- getNByteString n
             ds <- decodeDomain
             let dom = hs `BS.append` "." `BS.append` ds
             push pos dom
             return dom
   where
+    -- 掩码，掩掉高2位
     getValue c = c .&. 0x3f
     isPointer c = testBit c 7 && testBit c 6
     isExtLabel c = (not $ testBit c 7) && testBit c 6
