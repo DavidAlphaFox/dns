@@ -165,6 +165,7 @@ makeAddrInfo addr mport = do
 --   Multiple lookups must be done sequentially with a given
 --   'Resolver'. If multiple 'Resolver's are necessary for
 --   concurrent purpose, use 'withResolvers'.
+-- 库不DNS进行地址负载均衡，需要我们上层完成
 withResolver :: ResolvSeed -> (Resolver -> IO a) -> IO a
 withResolver seed func = bracket (openSocket seed) sClose $ \sock -> do
     connectSocket sock seed
@@ -241,6 +242,7 @@ fromDNSMessage ans conv = case errcode ans of
     Refused   -> Left OperationRefused
     BadOpt    -> Left BadOptRecord
   where
+    -- 取出头部的errcode
     errcode = rcode . flags . header
 
 -- | For backward compatibility.
