@@ -93,4 +93,5 @@ main = withSocketsDo $ do
     bindSocket sock (addrAddress addrinfo)
     forever $ do
         (bs, addr) <- recvFrom sock (bufSize conf)
+        -- 用完就丢
         forkIO $ handlePacket conf sock addr bs

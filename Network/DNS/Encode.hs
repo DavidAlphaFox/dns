@@ -193,6 +193,7 @@ encodeDomain dom
                                 , encodeDomain tl
                                 ]
   where
+    -- 在“.”处断开，DNS查询中是不包含“.”的
     (hd, tl') = BS.break (=='.') dom
     tl = if BS.null tl' then tl' else BS.drop 1 tl'
 
