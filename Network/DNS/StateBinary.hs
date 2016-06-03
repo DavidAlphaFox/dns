@@ -75,15 +75,18 @@ fixedSized n f a = do addPositionW n
 writeSized :: Show a => (a -> Int) -> (a -> Write) -> a -> SPut
 writeSized n f a = do addPositionW (n a)
                       return (f a)
-
+-- 找出Domain所在的位置
 wsPop :: Domain -> State WState (Maybe Int)
 wsPop dom = do
+  -- 从状态中取出wsDomain
     doms <- ST.gets wsDomain
     return $ M.lookup dom doms
 
 wsPush :: Domain -> Int -> State WState ()
 wsPush dom pos = do
+  -- 从状态中获得Domain的Map和位置
     (WState m cur) <- ST.get
+  -- 更新状态  
     ST.put $ WState (M.insert dom pos m) cur
 
 ----------------------------------------------------------------
@@ -174,6 +177,6 @@ runSGetWithLeftovers parser bs = toResult $ AL.parse (ST.runStateT parser initia
     toResult :: AL.Result r -> Either String (r, BL.ByteString)
     toResult (AL.Done i r) = Right (r, i)
     toResult (AL.Fail _ _ err) = Left err
-
+-- 从SPut转化成字节流
 runSPut :: SPut -> BL.ByteString
 runSPut = BB.toLazyByteString . BB.fromWrite . flip ST.evalState initialWState

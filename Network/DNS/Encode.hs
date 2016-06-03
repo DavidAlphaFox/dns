@@ -40,7 +40,7 @@ composeQuery idt qs = encode qry
 ----------------------------------------------------------------
 
 -- | Composing DNS data.
-
+-- 将DNS消息编码成字节流
 encode :: DNSMessage -> ByteString
 encode msg = runSPut (encodeDNSMessage msg)
 
@@ -70,13 +70,14 @@ encodeHeader hdr = encodeIdentifier (identifier hdr)
                 <> encodeFlags (flags hdr)
   where
     encodeIdentifier = putInt16
-
+-- 将包头中的标志位打包
 encodeFlags :: DNSFlags -> SPut
 encodeFlags DNSFlags{..} = put16 word
   where
+    -- Word16实现了Enum的toEnum
     word16 :: Enum a => a -> Word16
     word16 = toEnum . fromEnum
-
+    -- 修改byte用bit或来进行操作
     set :: Word16 -> State Word16 ()
     set byte = modify (.|. byte)
 
@@ -90,9 +91,10 @@ encodeFlags DNSFlags{..} = put16 word
               , set (word16 opcode `shiftL` 11)
               , when (qOrR==QR_Response) $ set (bit 15)
               ]
-
+    -- execState 会执行sequence序列
+    -- 0作为初始值
     word = execState st 0
-
+-- 编码应答部分
 encodeQuestion :: Question -> SPut
 encodeQuestion Question{..} = encodeDomain qname
                            <> putInt16 (typeToInt qtype)
@@ -175,7 +177,7 @@ putByteStringWithLength bs = putInt8 (fromIntegral $ BS.length bs) -- put the le
                           <> putByteString bs
 
 ----------------------------------------------------------------
-
+-- 编码Domain
 encodeDomain :: Domain -> SPut
 encodeDomain dom
     | BS.null dom = put8 0
@@ -183,7 +185,9 @@ encodeDomain dom
         mpos <- wsPop dom
         cur <- gets wsPosition
         case mpos of
+            -- 如果有位置，直接使用DNS中的ptr指到相应位置上
             Just pos -> encodePointer pos
+            -- 没找到，就在当前槽放置Domain
             Nothing  -> wsPush dom cur >>
                         mconcat [ encodePartialDomain hd
                                 , encodeDomain tl

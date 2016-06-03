@@ -12,11 +12,13 @@ import Data.Typeable (Typeable)
 ----------------------------------------------------------------
 
 -- | Type for domain.
+-- Domian是ByteString的别名
 type Domain = ByteString
 
 ----------------------------------------------------------------
 
 -- | Types for resource records.
+-- DNS类型
 data TYPE = A
           | AAAA
           | NS
@@ -29,7 +31,7 @@ data TYPE = A
           | DNAME
           | OPT
           | UNKNOWN Int deriving (Eq, Show, Read)
-
+-- DNS类型对应的数字整形
 rrDB :: [(TYPE, Int)]
 rrDB = [
     (A,      1)
@@ -121,7 +123,7 @@ data DNSMessage = DNSMessage {
 
 -- | For backward compatibility.
 type DNSFormat = DNSMessage
-
+-- DNS头
 -- | Raw data format for the header of DNS Query and Response.
 data DNSHeader = DNSHeader {
     identifier :: Int
@@ -231,7 +233,8 @@ defaultQuery = DNSMessage {
   , authority  = []
   , additional = []
   }
-
+-- 默认的响应
+-- 默认响应是权威响应
 defaultResponse :: DNSMessage
 defaultResponse =
   let hd = header defaultQuery
@@ -245,7 +248,7 @@ defaultResponse =
             }
         }
       }
-
+-- 回答域名查询的响应
 responseA :: Int -> Question -> [IPv4] -> DNSMessage
 responseA ident q ips =
   let hd = header defaultResponse
