@@ -29,7 +29,8 @@ import Data.Monoid (Monoid, mconcat, mappend, mempty)
 ----------------------------------------------------------------
 
 type SPut = State WState Write
-
+-- 写入时候的字节流状态
+-- 放在状态机当中
 data WState = WState {
     wsDomain :: Map Domain Int
   , wsPosition :: Int
