@@ -89,6 +89,7 @@ data ResolvConf = ResolvConf {
 --   >>> let cache = RCHostName "8.8.8.8"
 --   >>> let rc = defaultResolvConf { resolvInfo = cache }
 --
+-- 使用默认的DNS解析器
 defaultResolvConf :: ResolvConf
 defaultResolvConf = ResolvConf {
     resolvInfo = RCFilePath "/etc/resolv.conf"
@@ -127,6 +128,7 @@ data Resolver = Resolver {
 --
 --    >>> rs <- makeResolvSeed defaultResolvConf
 --
+-- 从默认配置中的到一个Resolv的配置
 makeResolvSeed :: ResolvConf -> IO ResolvSeed
 makeResolvSeed conf = ResolvSeed <$> addr
                                  <*> pure (resolvTimeout conf)
@@ -169,6 +171,8 @@ makeAddrInfo addr mport = do
 withResolver :: ResolvSeed -> (Resolver -> IO a) -> IO a
 withResolver seed func = bracket (openSocket seed) sClose $ \sock -> do
     connectSocket sock seed
+    -- 调用回调函数
+    -- 函数执行完之后，会立刻关闭相关socket的
     func $ makeResolver seed sock
 
 -- | Giving thread-safe 'Resolver's to the function of the second

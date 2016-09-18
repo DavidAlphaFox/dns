@@ -40,6 +40,8 @@ timeout' msg tm io = do
 proxyRequest :: Conf -> ResolvConf -> DNSMessage -> IO (Maybe DNSMessage)
 proxyRequest Conf{..} rc req = do
     let worker Resolver{..} = do
+            -- 重新打包
+            -- toChunks是让ByteString立刻生成，mconcat是将list变成普通的
             let packet = mconcat . toChunks $ encode req
             sendAll dnsSock packet
             receive dnsSock
@@ -64,6 +66,7 @@ handleRequest conf@Conf{hosts=hosts} rc req =
     filterA = filter ((==A) . qtype)
     ident = identifier . header $ req
     lookupHosts = do
+        -- 过滤出A请求
         q <- listToMaybe . filterA . question $ req
         -- 直接使用BSD的lookup
         ip <- lookup (qname q) hosts
@@ -84,6 +87,7 @@ handlePacket conf@Conf{..} sock addr bs = case decode (fromChunks [bs]) of
 main :: IO ()
 main = withSocketsDo $ do
     dns <- fromMaybe (realDNS def) . listToMaybe <$> getArgs
+    -- 生成配置
     let conf = def { realDNS=dns }
     addrinfos <- getAddrInfo
                    (Just (defaultHints {addrFlags = [AI_PASSIVE]}))

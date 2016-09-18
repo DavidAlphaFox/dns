@@ -54,6 +54,10 @@ encodeDNSMessage msg = encodeHeader hdr
                     <> mconcat (map encodeRR au)
                     <> mconcat (map encodeRR ad)
   where
+    -- 根据RFC 1035
+    -- 头部后面应该跟随 有多少个question，多少个answer
+    -- 多少个authority 和多少个additional
+    -- 一共占4个16bit
     encodeNums = mconcat $ fmap putInt16 [length qs
                                          ,length an
                                          ,length au
@@ -65,11 +69,14 @@ encodeDNSMessage msg = encodeHeader hdr
     au = authority msg
     ad = additional msg
 
+-- DNS的头部ID占16位，标志位占16位
+-- RFC 1035
 encodeHeader :: DNSHeader -> SPut
 encodeHeader hdr = encodeIdentifier (identifier hdr)
                 <> encodeFlags (flags hdr)
   where
     encodeIdentifier = putInt16
+
 -- 将包头中的标志位打包
 encodeFlags :: DNSFlags -> SPut
 encodeFlags DNSFlags{..} = put16 word
@@ -78,9 +85,10 @@ encodeFlags DNSFlags{..} = put16 word
     word16 :: Enum a => a -> Word16
     word16 = toEnum . fromEnum
     -- 修改byte用bit或来进行操作
+    -- modify :: MonadState s m => (s -> s) -> m ()
     set :: Word16 -> State Word16 ()
     set byte = modify (.|. byte)
-
+    -- 从左向右逐个执行
     st :: State Word16 ()
     st = sequence_
               [ set (word16 rcode)
