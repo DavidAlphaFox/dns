@@ -165,8 +165,11 @@ decodeRR = do
 
     decodeRR' dom t = do
         ignoreClass
+        -- ttl是这个record的存活时间
         ttl <- decodeTTL
+        -- record的长度
         len <- decodeRLen
+        -- 根据类型解析DNS的Data部分
         dat <- decodeRData t len
         return ResourceRecord { rrname = dom
                               , rrtype = t
@@ -285,6 +288,7 @@ decodeDomain = do
     -- 那么这个是一个pointer
     isPointer c = testBit c 7 && testBit c 6
     isExtLabel c = (not $ testBit c 7) && testBit c 6
-
+-- 忽略Class
+-- 
 ignoreClass :: SGet ()
 ignoreClass = () <$ get16
