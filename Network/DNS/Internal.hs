@@ -8,7 +8,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.IP (IP, IPv4, IPv6)
 import Data.Maybe (fromMaybe)
 import Data.Typeable (Typeable)
-
+-- 包含了所有的DNS协议相关的定义
 ----------------------------------------------------------------
 
 -- | Type for domain.

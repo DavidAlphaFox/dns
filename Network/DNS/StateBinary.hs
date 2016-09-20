@@ -40,8 +40,10 @@ initialWState :: WState
 initialWState = WState M.empty 0
 
 instance Monoid SPut where
-    mempty = return mempty
-    mappend a b = mconcat <$> sequence [a, b]
+  -- 直接返回mempty
+  mempty = return mempty
+  -- mappend 是将a和b进行sequence操作，之后进行mconcat
+  mappend a b = mconcat <$> sequence [a, b]
 
 put8 :: Word8 -> SPut
 put8 = fixedSized 1 BB.writeWord8
@@ -79,15 +81,16 @@ writeSized n f a = do addPositionW (n a)
 -- 找出Domain所在的位置
 wsPop :: Domain -> State WState (Maybe Int)
 wsPop dom = do
-  -- 从状态中取出wsDomain
+  -- 从状态中取出Domains的Map
     doms <- ST.gets wsDomain
+  -- 找出domain的指针位置 
     return $ M.lookup dom doms
 
 wsPush :: Domain -> Int -> State WState ()
 wsPush dom pos = do
   -- 从状态中获得Domain的Map和位置
     (WState m cur) <- ST.get
-  -- 更新状态  
+  -- 将domain的全部和位置放入状态中  
     ST.put $ WState (M.insert dom pos m) cur
 
 ----------------------------------------------------------------

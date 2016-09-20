@@ -186,25 +186,32 @@ putByteStringWithLength bs = putInt8 (fromIntegral $ BS.length bs) -- put the le
 
 ----------------------------------------------------------------
 -- 编码Domain
+-- RFC 1035种Domain的编码是不包含"."的
 encodeDomain :: Domain -> SPut
 encodeDomain dom
+    --  如果dom是空的，那么直接放入0
     | BS.null dom = put8 0
     | otherwise = do
+        -- 得到所有未知
         mpos <- wsPop dom
+        -- 得到当前的位置
         cur <- gets wsPosition
         case mpos of
             -- 如果有位置，直接使用DNS中的ptr指到相应位置上
             Just pos -> encodePointer pos
-            -- 没找到，就在当前槽放置Domain
+            -- 没找到，就在当前位置放置Domain
             Nothing  -> wsPush dom cur >>
                         mconcat [ encodePartialDomain hd
+                                -- 这个地方是个递归调用
                                 , encodeDomain tl
                                 ]
   where
     -- 在“.”处断开，DNS查询中是不包含“.”的
     (hd, tl') = BS.break (=='.') dom
+    -- 去掉"."
     tl = if BS.null tl' then tl' else BS.drop 1 tl'
-
+-- ptr需要16进制高两位设置为11
+-- pos是从整个包头的位置开始的偏移，不是从当前section的偏移
 encodePointer :: Int -> SPut
 encodePointer pos = putInt16 (pos .|. 0xc000)
 
