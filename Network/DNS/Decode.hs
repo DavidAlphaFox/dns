@@ -102,6 +102,7 @@ decodeFlags = toFlags <$> get16
 
 decodeHeader :: SGet (DNSHeader,Int,Int,Int,Int)
 decodeHeader = do
+        -- 解析出Flag和Identifier
         hd <- DNSHeader <$> decodeIdentifier
                         <*> decodeFlags
         qdCount <- decodeQdCount
@@ -125,7 +126,7 @@ decodeHeader = do
 -- 解析请求
 decodeQueries :: Int -> SGet [Question]
 decodeQueries n = replicateM n decodeQuery
-
+-- 解析类型
 decodeType :: SGet TYPE
 decodeType = intToType <$> getInt16
 
@@ -139,11 +140,14 @@ decodeQuery = Question <$> decodeDomain
 
 decodeRRs :: Int -> SGet [ResourceRecord]
 decodeRRs n = replicateM n decodeRR
-
+-- 解析资源
 decodeRR :: SGet ResourceRecord
 decodeRR = do
+    -- 解析域名
     dom <- decodeDomain
+    -- 解析类型
     typ <- decodeType
+    -- 根据类型，解析相应的Resource Record
     decodeRR' dom typ
   where
     decodeRR' _ OPT = do
@@ -240,6 +244,7 @@ decodeOData (OUNKNOWN i) len = OD_Unknown i <$> getNByteString len
 
 decodeDomain :: SGet Domain
 decodeDomain = do
+    -- 得到当前的偏移
     pos <- getPosition
     c <- getInt8
     let n = getValue c
@@ -249,13 +254,18 @@ decodeDomain = do
         _ | c == 0 -> return ""
         -- DNS指针
         _ | isPointer c -> do
+            -- 得到位置
             d <- getInt8
+            -- 计算offset
+            -- 因为使用大端序列，n为高8位，d为低8位
             let offset = n * 256 + d
+            -- 从offset处 pop出相应的domain
             mo <- pop offset
             case mo of
                 Nothing -> fail $ "decodeDomain: " ++ show offset
                 -- A pointer may refer to another pointer.
                 -- So, register this position for the domain.
+                -- 记录这个Domain的指针位置，因为别的指针可能指向这个指针
                 Just o -> push pos o >> return o
         -- As for now, extended labels have no use.
         -- This may change some time in the future.
@@ -271,6 +281,8 @@ decodeDomain = do
   where
     -- 掩码，掩掉高2位
     getValue c = c .&. 0x3f
+    -- 如果高两位已经都设置了
+    -- 那么这个是一个pointer
     isPointer c = testBit c 7 && testBit c 6
     isExtLabel c = (not $ testBit c 7) && testBit c 6
 
