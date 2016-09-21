@@ -94,24 +94,27 @@ wsPush dom pos = do
     ST.put $ WState (M.insert dom pos m) cur
 
 ----------------------------------------------------------------
-
+-- SGet 是StateT的一个别名
+-- 使用Monad Transform主要是为了和其它的Monad构成栈
 type SGet = StateT PState (T.Parser ByteString)
-
+-- psDomain是一个位移对应Domain的Map
+-- psPosition是已经解析到何处的纪录
 data PState = PState {
     psDomain :: IntMap Domain
   , psPosition :: Int
   }
 
 ----------------------------------------------------------------
-
+-- 取得当前PState中的位置信息
 getPosition :: SGet Int
 getPosition = psPosition <$> ST.get
+
 -- 增加位移
 addPosition :: Int -> SGet ()
 addPosition n = do
     PState dom pos <- ST.get
     ST.put $ PState dom (pos + n)
-
+-- 将位置和已经解析出来的域名，放入相应的位置
 push :: Int -> Domain -> SGet ()
 push n d = do
     PState dom pos <- ST.get
@@ -160,8 +163,8 @@ getNBytes :: Int -> SGet [Int]
 getNBytes len = toInts <$> getNByteString len
   where
     toInts = map fromIntegral . BS.unpack
--- 将流的指针一定N个位置
--- 然后取出字串，之后进行类型提升
+-- 从字节流中读出N个Byte的字符，构成ByteString
+-- 之后，更新状态，让状态的中的Position向前移动N个位置
 getNByteString :: Int -> SGet ByteString
 getNByteString n = ST.lift (A.take n) <* addPosition n
 
@@ -174,6 +177,8 @@ sinkSGet :: SGet a -> Sink ByteString (ResourceT IO) (a, PState)
 sinkSGet parser = sinkParser (ST.runStateT parser initialState)
 
 runSGet :: SGet a -> BL.ByteString -> Either String (a, PState)
+-- (ST.runStateT parser initialState)  ::  s -> T.Parser (ByteString, s)  
+-- AL.parse :: T.Parser (a,PState) -> ByteString -> Result (a,PState)
 runSGet parser bs = AL.eitherResult $ AL.parse (ST.runStateT parser initialState) bs
 
 runSGetWithLeftovers :: SGet a -> BL.ByteString -> Either String ((a, PState), BL.ByteString)
