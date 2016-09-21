@@ -39,6 +39,7 @@ Library
                       , network >= 2.3
                       , random
                       , resourcet
+                      , hedis >= 0.6.9
   else
     Build-Depends:      base >= 4 && < 5
                       , attoparsec
@@ -54,6 +55,7 @@ Library
                       , network-bytestring
                       , random
                       , resourcet
+                      , hedis >= 0.6.9
 
 Test-Suite network
   Type:                 exitcode-stdio-1.0
