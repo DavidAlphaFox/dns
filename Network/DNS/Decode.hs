@@ -44,7 +44,7 @@ receive = receiveDNSFormat . sourceSocket
 ----------------------------------------------------------------
 
 -- | Parsing DNS data.
-
+-- 直接处理DNS数据
 decode :: BL.ByteString -> Either String DNSMessage
 decode bs = fst <$> runSGet decodeResponse bs
 
@@ -182,7 +182,9 @@ decodeRR = do
     decodeDNSOK = flip testBit 15 <$> getInt16
     decodeTTL = fromIntegral <$> get32
     decodeRLen = getInt16
-
+-- 解析DATA部分
+-- DATA部分的类型有NS，MX，CNAME，DNAME，TEXT
+-- A，AAA和SOA
 decodeRData :: TYPE -> Int -> SGet RData
 decodeRData NS _ = RD_NS <$> decodeDomain
 decodeRData MX _ = RD_MX <$> decodePreference <*> decodeDomain
