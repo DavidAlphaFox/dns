@@ -1,5 +1,5 @@
 Name:                   dns
-Version:                2.0.2
+Version:                2.0.10
 Author:                 Kazu Yamamoto <kazu@iij.ad.jp>
 Maintainer:             Kazu Yamamoto <kazu@iij.ad.jp>
 License:                BSD3
@@ -29,8 +29,8 @@ Library
     Build-Depends:      base >= 4 && < 5
                       , attoparsec
                       , binary
-                      , blaze-builder
                       , bytestring
+                      , bytestring-builder
                       , conduit >= 1.1
                       , conduit-extra >= 1.1
                       , containers
@@ -40,12 +40,14 @@ Library
                       , random
                       , resourcet
                       , hedis >= 0.6.9
+                      , safe == 0.3.*
+
   else
     Build-Depends:      base >= 4 && < 5
                       , attoparsec
                       , binary
-                      , blaze-builder
                       , bytestring
+                      , bytestring-builder
                       , conduit >= 1.1
                       , conduit-extra >= 1.1
                       , containers
@@ -56,6 +58,8 @@ Library
                       , random
                       , resourcet
                       , hedis >= 0.6.9
+                      , safe == 0.3.*
+
 
 Test-Suite network
   Type:                 exitcode-stdio-1.0
@@ -67,6 +71,7 @@ Test-Suite network
   Build-Depends:        dns
                       , base
                       , bytestring
+                      , bytestring-builder
                       , hspec
 
 Test-Suite spec
@@ -80,8 +85,8 @@ Test-Suite spec
   Build-Depends:        base
                       , attoparsec
                       , binary
-                      , blaze-builder
                       , bytestring
+                      , bytestring-builder
                       , conduit >= 1.1
                       , conduit-extra >= 1.1
                       , containers
@@ -92,6 +97,7 @@ Test-Suite spec
                       , network >= 2.3
                       , random
                       , resourcet
+                      , safe == 0.3.*
                       , word8
 
 Test-Suite doctest

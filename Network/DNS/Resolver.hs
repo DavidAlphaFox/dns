@@ -14,6 +14,7 @@ module Network.DNS.Resolver (
   , lookupAuth
   -- ** Raw looking up function
   , lookupRaw
+  , lookupRawAD
   , fromDNSMessage
   , fromDNSFormat
   ) where
@@ -27,8 +28,11 @@ import Network.DNS.Decode
 import Network.DNS.Encode
 import Network.DNS.Internal
 import qualified Data.ByteString.Char8 as BS
-import Network.Socket (HostName, Socket, SocketType(Datagram), sClose, socket, connect)
-import Network.Socket (AddrInfoFlag(..), AddrInfo(..), SockAddr(..), PortNumber(..), defaultHints, getAddrInfo)
+import Network.Socket (HostName, Socket, SocketType(Stream, Datagram))
+import Network.Socket (AddrInfoFlag(..), AddrInfo(..), SockAddr(..))
+import Network.Socket (Family(AF_INET, AF_INET6), PortNumber(..))
+import Network.Socket (close, socket, connect, getPeerName, getAddrInfo)
+import Network.Socket (defaultHints, defaultProtocol)
 import Prelude hiding (lookup)
 import System.Random (getStdRandom, randomR)
 import System.Timeout (timeout)
@@ -155,7 +159,7 @@ makeAddrInfo addr mport = do
     let connectPort = case addrAddress a of
                         SockAddrInet pn ha -> SockAddrInet (fromMaybe pn mport) ha
                         SockAddrInet6 pn fi ha sid -> SockAddrInet6 (fromMaybe pn mport) fi ha sid
-                        unix -> unix
+                        unixAddr -> unixAddr
     return $ a { addrAddress = connectPort }
 
 ----------------------------------------------------------------
@@ -169,7 +173,7 @@ makeAddrInfo addr mport = do
 --   concurrent purpose, use 'withResolvers'.
 
 withResolver :: ResolvSeed -> (Resolver -> IO a) -> IO a
-withResolver seed func = bracket (openSocket seed) sClose $ \sock -> do
+withResolver seed func = bracket (openSocket seed) close $ \sock -> do
     connectSocket sock seed
     -- 调用回调函数
     -- 函数执行完之后，会立刻关闭相关socket的
@@ -187,7 +191,7 @@ withResolvers seeds func = bracket openSockets closeSockets $ \socks -> do
     func resolvs
   where
     openSockets = mapM openSocket seeds
-    closeSockets = mapM sClose
+    closeSockets = mapM close
 
 openSocket :: ResolvSeed -> IO Socket
 openSocket seed = socket (addrFamily ai) (addrSocketType ai) (addrProtocol ai)
@@ -273,9 +277,13 @@ lookupAuth :: Resolver -> Domain -> TYPE -> IO (Either DNSError [RData])
 lookupAuth = lookupSection authority
 
 
--- | Look up a name and return the entire DNS Response. Sample output
---   is included below, however it is /not/ tested -- the sequence
---   number is unpredictable (it has to be!).
+-- | Look up a name and return the entire DNS Response.  If the
+--   initial UDP query elicits a truncated answer, the query is
+--   retried over TCP.  The TCP retry may extend the total time
+--   taken by one more timeout beyond timeout * tries.
+--
+--   Sample output is included below, however it is /not/ tested
+--   the sequence number is unpredictable (it has to be!).
 --
 --   The example code:
 --
@@ -298,7 +306,9 @@ lookupAuth = lookupSection authority
 --                                      trunCation = False,
 --                                      recDesired = True,
 --                                      recAvailable = True,
---                                      rcode = NoErr },
+--                                      rcode = NoErr,
+--                                      authenData = False
+--                                    },
 --                        },
 --             question = [Question { qname = \"www.example.com.\",
 --                                    qtype = A}],
@@ -312,21 +322,47 @@ lookupAuth = lookupSection authority
 --  @
 --
 lookupRaw :: Resolver -> Domain -> TYPE -> IO (Either DNSError DNSMessage)
-lookupRaw = lookupRawInternal receive
+lookupRaw = lookupRawInternal receive False
+
+-- | Same as lookupRaw, but the query sets the AD bit, which solicits the
+--   the authentication status in the server reply.  In most applications
+--   (other than diagnostic tools) that want authenticated data It is
+--   unwise to trust the AD bit in the responses of non-local servers, this
+--   interface should in most cases only be used with a loopback resolver.
+--
+lookupRawAD :: Resolver -> Domain -> TYPE -> IO (Either DNSError DNSMessage)
+lookupRawAD = lookupRawInternal receive True
+
+-- Lookup loop, we try UDP until we get a response.  If the response
+-- is truncated, we try TCP once, with no further UDP retries.
+-- EDNS0 support would significantly reduce the need for TCP retries.
+--
+-- For now, we optimize for low latency high-availability caches
+-- (e.g.  running on a loopback interface), where TCP is cheap
+-- enough.  We could attempt to complete the TCP lookup within the
+-- original time budget of the truncated UDP query, by wrapping both
+-- within a a single 'timeout' thereby staying within the original
+-- time budget, but it seems saner to give TCP a full opportunity to
+-- return results.  TCP latency after a truncated UDP reply will be
+-- atypical.
+--
+-- Future improvements might also include support for TCP on the
+-- initial query, and of course support for multiple nameservers.
 
 lookupRawInternal ::
     (Socket -> IO DNSMessage)
+    -> Bool
     -> Resolver
     -> Domain
     -> TYPE
     -> IO (Either DNSError DNSMessage)
-lookupRawInternal _ _   dom _
+lookupRawInternal _ _ _   dom _
   | isIllegal dom     = return $ Left IllegalDomain
-lookupRawInternal rcv rlv dom typ = do
+lookupRawInternal rcv ad rlv dom typ = do
     -- 获取查询的ID
     seqno <- genId rlv
-    -- 打包 query
-    let query = composeQuery seqno [q]
+     -- 打包 query
+    let query = (if ad then composeQueryAD else composeQuery) seqno [q]
         checkSeqno = check seqno
     loop query checkSeqno 0 False
   where
@@ -349,10 +385,11 @@ lookupRawInternal rcv rlv dom typ = do
                   -- seq是否匹配
                   -- 如果匹配则表示成功了
                   let valid = checkSeqno res
-                  if valid then
-                      return $ Right res
-                    else
-                      loop query checkSeqno (cnt + 1) False
+                  case valid of
+                      False  -> loop query checkSeqno (cnt + 1) False
+                      True | not $ trunCation $ flags $ header res
+                             -> return $ Right res
+                      _      -> tcpRetry query sock tm
     sock = dnsSock rlv
     tm = dnsTimeout rlv
     retry = dnsRetry rlv
@@ -360,6 +397,65 @@ lookupRawInternal rcv rlv dom typ = do
     q = makeQuestion dom typ
     -- 检查seqno和包体中的seqno是否相同
     check seqno res = identifier (header res) == seqno
+
+-- Create a TCP socket `just like` our UDP socket and retry the same
+-- query over TCP.  Since TCP is a reliable transport, and we just
+-- got a (truncated) reply from the server over UDP (so it has the
+-- answer, but it is just too large for UDP), we expect to succeed
+-- quickly on the first try.  There will be no further retries.
+
+tcpRetry ::
+    Query
+    -> Socket
+    -> Int
+    -> IO (Either DNSError DNSMessage)
+tcpRetry query sock tm = do
+    peer <- getPeerName sock
+    bracket (tcpOpen peer)
+            (maybe (return ()) close)
+            (tcpLookup query peer tm)
+
+-- Create a TCP socket with the given socket address (taken from a
+-- corresponding UDP socket).  This might throw an I/O Exception
+-- if we run out of file descriptors.  Should this use tryIOError,
+-- and return "Nothing" also in that case?  If so, perhaps similar
+-- code is needed in openSocket, but that has to wait until we
+-- refactor `withResolver` to not do "early" socket allocation, and
+-- instead allocate a fresh UDP socket for each `lookupRawInternal`
+-- invocation.  It would be bad to fail an entire `withResolver`
+-- action, if the socket shortage is transient, and the user intends
+-- to make many DNS queries with the same resolver handle.
+
+tcpOpen :: SockAddr -> IO (Maybe Socket)
+tcpOpen peer = do
+    case (peer) of
+        SockAddrInet _ _ ->
+            socket AF_INET Stream defaultProtocol >>= return . Just
+        SockAddrInet6 _ _ _ _ ->
+            socket AF_INET6 Stream defaultProtocol >>= return . Just
+        _ -> return Nothing -- Only IPv4 and IPv6 are possible
+
+-- Perform a DNS query over TCP, if we were successful in creating
+-- the TCP socket.  The socket creation can only fail if we run out
+-- of file descriptors, we're not making connections here.  Failure
+-- is reported as "server" failure, though it is really our stub
+-- resolver that's failing.  This is likely good enough.
+
+tcpLookup ::
+    Query
+    -> SockAddr
+    -> Int
+    -> Maybe Socket
+    -> IO (Either DNSError DNSMessage)
+tcpLookup _ _ _ Nothing = return $ Left ServerFailure
+tcpLookup query peer tm (Just vc) = do
+    response <- timeout tm $ do
+        connect vc $ peer
+        sendAll vc $ encodeVC query
+        receiveVC vc
+    case response of
+        Nothing  -> return $ Left TimeoutExpired
+        Just res -> return $ Right res
 
 #if mingw32_HOST_OS == 1
     -- win32没有SendAll的函数
